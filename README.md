@@ -70,6 +70,113 @@ $ php benchmark/producer.php N & php benchmark/consumer.php
 | bunnyphp    | 1000000        | 11.63421    | 85953           | 11.947426   | 83700           |
 | bunnyphp +/-|                |             | +160.2%/+110.6% |             | +158.9%/+748.5% |
 
+## Quick Start
+
+### Producing
+
+```php
+use Bunny\Client;
+use Bunny\Configuration;
+use React\EventLoop\Loop;
+
+use function React\Async\async;
+
+$configuration = new Configuration(
+    host:     'HOSTNAME',
+    vhost:    'VHOST',    // The default vhost is '/'
+    user:     'USERNAME', // The default user is 'guest'
+    password: 'PASSWORD', // The default password is 'guest'
+);
+
+$bunny = new Client($configuration);
+Loop::futureTick(async(static function (): void {
+  $bunny->channel()->publish(
+    body:       $message,     // The message you're publishing as a string
+    routingKey: 'queue_name', // Routing key, in this example the queue's name
+  );
+  $bunny->disconnect();
+}));
+
+// Unlike the consumer example, we're not setting signal handlers before this a very quick operation
+```
+
+### Consuming
+
+```php
+use Bunny\Client;
+use Bunny\Configuration;
+use React\EventLoop\Loop;
+
+use function React\Async\async;
+
+$configuration = new Configuration(
+    host:     'HOSTNAME',
+    vhost:    'VHOST',    // The default vhost is '/'
+    user:     'USERNAME', // The default user is 'guest'
+    password: 'PASSWORD', // The default password is 'guest'
+);
+
+$consumerCleanUp = static function () {};
+$bunny = new Client($configuration);
+Loop::futureTick(async(static function () use (&$consumerCleanUp): void {
+    $channel = $bunny->channel();
+    $response = $channel->consume(
+        async(static function (Message $message, Channel $channel, Client $bunny) {
+            $success = handleMessage($message); // Handle your message here
+    
+            if ($success) {
+                $channel->ack($message); // Acknowledge message
+                return;
+            }
+    
+            $channel->nack($message); // Mark message fail, message will be redelivered
+        }),
+        'queue_name',
+    );
+    $consumerCleanUp = static fn () => $channel->cancel($response->consumerTag);
+}));
+
+// Unlike the producer example, we do need signal handlers because this process can run for weeks and we want to shut down cleanly
+$signals = [SIGINT, SIGTERM, SIGHUP];
+$signalHandler = async(static function () use ($signals, &$signalHandler, &$consumerCleanUp, $bunny): void {
+  foreach ($signals as $signal) {
+      Loop::removeSignal($signal, $signalHandler);
+  }
+  
+  $consumerCleanUp();
+  $bunny->disconnect();
+}))
+foreach ($signals as $signal) {
+    Loop::addSignal($signal, $signalHandler);
+}
+```
+
+## Always run moving parts in a fiber
+
+Since v0.6 Bunny has been rebuilt using [`Fibers`](https://reactphp.org/async/). This means that every method on `Client` and `Channel` must be called inside a fiber. In the examples this will be called using a `Loop::futureTick` call. In your applications this might be some other trigger like a HTTP request. As long as somewhere in the direct call stack this call is inside a fiber you'll be good.
+
+All the examples from this point on will include a `Full Example` on how to use that specific example using a full connection cycle inside a fiber the example. For the above that would be the following, even tho it's not doing anything:
+
+```php
+use Bunny\Client;
+use Bunny\Configuration;
+use React\EventLoop\Loop;
+
+use function React\Async\async;
+
+$configuration = new Configuration(
+    host:     'HOSTNAME',
+    vhost:    'VHOST',    // The default vhost is '/'
+    user:     'USERNAME', // The default user is 'guest'
+    password: 'PASSWORD', // The default password is 'guest'
+);
+
+$bunny = new Client($configuration);
+Loop::futureTick(async(static function (): void {
+  $bunny->connect();
+}));
+```
+
 ## Tutorial
 
 ### Connecting
@@ -82,9 +189,9 @@ use Bunny\Configuration;
 
 $configuration = new Configuration(
     host:     'HOSTNAME',
-    vhost:    'VHOST',    // The default vhost is /
-    user:     'USERNAME', // The default user is guest
-    password: 'PASSWORD', // The default password is guest
+    vhost:    'VHOST',    // The default vhost is '/'
+    user:     'USERNAME', // The default user is 'guest'
+    password: 'PASSWORD', // The default password is 'guest'
 );
 
 $bunny = new Client($configuration);
@@ -101,9 +208,9 @@ use Bunny\Configuration;
 
 $configuration = new Configuration(
     host:     'HOSTNAME',
-    vhost:    'VHOST',    // The default vhost is /
-    user:     'USERNAME', // The default user is guest
-    password: 'PASSWORD', // The default password is guest
+    vhost:    'VHOST',    // The default vhost is '/'
+    user:     'USERNAME', // The default user is 'guest'
+    password: 'PASSWORD', // The default password is 'guest'
     tls:      [
         'cafile'      => 'ca.pem',
         'local_cert'  => 'client.cert',
@@ -135,9 +242,9 @@ use Bunny\Configuration;
 
 $configuration = new Configuration(
     host:             'HOSTNAME',
-    vhost:            'VHOST',    // The default vhost is /
-    user:             'USERNAME', // The default user is guest
-    password:         'PASSWORD', // The default password is guest
+    vhost:            'VHOST',    // The default vhost is '/'
+    user:             'USERNAME', // The default user is 'guest'
+    password:         'PASSWORD', // The default password is 'guest'
     clientProperties: [
         'connection_name' => 'My connection',
     ],
@@ -155,9 +262,9 @@ use Bunny\Configuration;
 
 $configuration = new Configuration(
     host:             'HOSTNAME',
-    vhost:            'VHOST',    // The default vhost is /
-    user:             'USERNAME', // The default user is guest
-    password:         'PASSWORD', // The default password is guest
+    vhost:            'VHOST',    // The default vhost is '/'
+    user:             'USERNAME', // The default user is 'guest'
+    password:         'PASSWORD', // The default password is 'guest'
     clientProperties: [
         'connection_name' => 'Pod: ' . getenv('POD_NAME') . '; Release: ' . getenv('RELEASE_TAG') . '; Namespace: ' . getenv('POD_NAMESPACE'),
     ],
@@ -176,6 +283,34 @@ $channel = $bunny->channel();
 $channel->queueDeclare('queue_name'); // Queue name
 ```
 
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function (): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $channel->queueDeclare('queue_name'); // Queue name
+    $channel->close(); // Not required as the Client::disconnect() method handles this for us if we don't, but added for completeness sake
+    $bunny->disconnect();
+  }));
+  ```
+</details>
+
 #### Publishing a message on a virtual host with quorum queues as a default
 
 From RabbitMQ 4 queues will be standard defined as Quorum queues, those are by default durable, in order to connect to them you should use the queue declare method as follows. In the current version of RabbitMQ 3.11.15 this is already supported, if the virtual host is configured to have a default type of Quorum.
@@ -184,6 +319,34 @@ From RabbitMQ 4 queues will be standard defined as Quorum queues, those are by d
 $channel = $bunny->channel();
 $channel->queueDeclare('queue_name', false, true); // Queue name
 ```
+
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function (): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $channel->queueDeclare('queue_name', false, true); // Queue name
+    $channel->close(); // Not required as the Client::disconnect() method handles this for us if we don't, but added for completeness sake
+    $bunny->disconnect();
+  }));
+  ```
+</details>
 
 With a communication channel set up, we can now publish a message to the queue:
 
@@ -196,6 +359,39 @@ $channel->publish(
 );
 ```
 
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function (): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $channel->publish(
+        $message,    // The message you're publishing as a string
+        [],          // Any headers you want to add to the message
+        '',          // Exchange name
+        'queue_name', // Routing key, in this example the queue's name
+    );
+    $channel->close(); // Not required as the Client::disconnect() method handles this for us if we don't, but added for completeness sake
+    $bunny->disconnect();
+  }));
+  ```
+</details>
+
 Alternatively:
 
 ```php
@@ -205,12 +401,43 @@ $channel->publish(
 );
 ```
 
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function (): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $channel->publish(
+        body:       $message,     // The message you're publishing as a string
+        routingKey: 'queue_name', // Routing key, in this example the queue's name
+    );
+    $channel->close(); // Not required as the Client::disconnect() method handles this for us if we don't, but added for completeness sake
+    $bunny->disconnect();
+  }));
+  ```
+</details>
+
 ### Subscribing to a queue
 
 Subscribing to a queue can be done in two ways. The first way will run indefinitely:
 
 ```php
-$channel->run(
+$channel->consume(
     static function (Message $message, Channel $channel, Client $bunny) {
         $success = handleMessage($message); // Handle your message here
 
@@ -225,17 +452,58 @@ $channel->run(
 );
 ```
 
-The other way lets you run the client for a specific amount of time consuming the queue before it stops:
+<details>
+  <summary>Full Example</summary>
 
-```php
-$channel->consume(
-    static function (Message $message, Channel $channel, Client $client) {
-        $channel->ack($message); // Acknowledge message
-    },
-    'queue_name',
-);
-$bunny->run(12); // Client runs for 12 seconds and then stops
-```
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $consumerCleanUp = static function () {};
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function () use (&$consumerCleanUp): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $response = $channel->consume(
+        async(static function (Message $message, Channel $channel, Client $bunny) {
+            $success = handleMessage($message); // Handle your message here
+    
+            if ($success) {
+                $channel->ack($message); // Acknowledge message
+                return;
+            }
+    
+            $channel->nack($message); // Mark message fail, message will be redelivered
+        }),
+        'queue_name',
+    );
+    $consumerCleanUp = static fn () => $channel->cancel($response->consumerTag);
+  }));
+
+  $signals = [SIGINT, SIGTERM, SIGHUP];
+  $signalHandler = async(static function () use ($signals, &$signalHandler, &$consumerCleanUp, $bunny): void {
+    foreach ($signals as $signal) {
+        Loop::removeSignal($signal, $signalHandler);
+    }
+    
+    $consumerCleanUp();
+    $bunny->disconnect();
+  }))
+  foreach ($signals as $signal) {
+      Loop::addSignal($signal, $signalHandler);
+  }
+  ```
+</details>
 
 ### Pop a single message from a queue
 
@@ -247,6 +515,38 @@ $message = $channel->get('queue_name');
 $channel->ack($message); // Acknowledge message
 ```
 
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function (): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $message = $channel->get('queue_name');
+
+    // Handle message
+    
+    $channel->ack($message); // Acknowledge message
+    $channel->close(); // Not required as the Client::disconnect() method handles this for us if we don't, but added for completeness sake
+    $bunny->disconnect();
+  }));
+  ```
+</details>
+
 ### Prefetch count
 
 A way to control how many messages are prefetched by BunnyPHP when consuming a queue is by using the channel's QOS method. In the example below only 5 messages will be prefetched. Combined with acknowledging messages this turns into an effective flow control for your applications, especially asynchronous applications. No new messages will be fetched unless one has been acknowledged.
@@ -257,6 +557,63 @@ $channel->qos(
     5,  // Prefetch count
 );
 ```
+
+<details>
+  <summary>Full Example</summary>
+
+  ```php
+  use Bunny\Client;
+  use Bunny\Configuration;
+  use React\EventLoop\Loop;
+  
+  use function React\Async\async;
+  
+  $configuration = new Configuration(
+      host:     'HOSTNAME',
+      vhost:    'VHOST',    // The default vhost is '/'
+      user:     'USERNAME', // The default user is 'guest'
+      password: 'PASSWORD', // The default password is 'guest'
+  );
+  
+  $consumerCleanUp = static function () {};
+  $bunny = new Client($configuration);
+  Loop::futureTick(async(static function () use (&$consumerCleanUp): void {
+    $bunny->connect(); // Not required as the Client::channel() method handles this for us if we don't, but added for completeness sake
+    $channel = $bunny->channel();
+    $channel->qos(
+        0, // Prefetch size
+        5,  // Prefetch count
+    );
+    $response = $channel->consume(
+        static function (Message $message, Channel $channel, Client $bunny) {
+            $success = handleMessage($message); // Handle your message here
+    
+            if ($success) {
+                $channel->ack($message); // Acknowledge message
+                return;
+            }
+    
+            $channel->nack($message); // Mark message fail, message will be redelivered
+        },
+        'queue_name',
+    );
+    $consumerCleanUp = static fn () => $channel->cancel($response->consumerTag);
+  }));
+
+  $signals = [SIGINT, SIGTERM, SIGHUP];
+  $signalHandler = async(static function () use ($signals, &$signalHandler, &$consumerCleanUp, $bunny): void {
+    foreach ($signals as $signal) {
+        Loop::removeSignal($signal, $signalHandler);
+    }
+    
+    $consumerCleanUp();
+    $bunny->disconnect();
+  }))
+  foreach ($signals as $signal) {
+      Loop::addSignal($signal, $signalHandler);
+  }
+  ```
+</details>
 
 ### Asynchronous usage
 
