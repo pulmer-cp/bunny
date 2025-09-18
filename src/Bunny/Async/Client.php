@@ -104,7 +104,7 @@ class Client extends AbstractClient
      *
      * @param float $maxSeconds
      */
-    public function run($maxSeconds = null)
+    public function run(?float $maxSeconds = null)
     {
         if ($maxSeconds !== null) {
             $this->stopTimer = $this->eventLoop->addTimer($maxSeconds, function () {

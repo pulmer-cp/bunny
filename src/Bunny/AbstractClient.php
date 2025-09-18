@@ -483,7 +483,7 @@ abstract class AbstractClient
      * @param float $maxSeconds
      * @return void
      */
-    abstract public function run($maxSeconds = null);
+    abstract public function run(?float $maxSeconds = null);
 
 
     /**

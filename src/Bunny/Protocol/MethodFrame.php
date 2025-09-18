@@ -27,7 +27,7 @@ class MethodFrame extends AbstractFrame
     /** @var int */
     public $methodId;
 
-    public function __construct($classId = null, $methodId = null)
+    public function __construct(?int $classId = null, ?int $methodId = null)
     {
         parent::__construct(Constants::FRAME_METHOD);
         $this->classId = $classId;

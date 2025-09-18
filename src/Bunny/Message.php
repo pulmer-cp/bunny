@@ -59,7 +59,7 @@ class Message
      * @param mixed $default
      * @return mixed
      */
-    public function getHeader($name, $default = null)
+    public function getHeader($name, mixed $default = null)
     {
         if (isset($this->headers[$name])) {
             return $this->headers[$name];

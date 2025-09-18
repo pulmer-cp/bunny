@@ -40,7 +40,7 @@ abstract class AbstractFrame
         return new static();
     }
 
-    public function __construct($type = null, $channel = null, $payloadSize = null, $payload = null)
+    public function __construct(?int $type = null, ?int $channel = null, ?int $payloadSize = null, ?string $payload = null)
     {
         $this->type = $type;
         $this->channel = $channel;

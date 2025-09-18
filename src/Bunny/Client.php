@@ -169,7 +169,7 @@ class Client extends AbstractClient
      *
      * @param float $maxSeconds
      */
-    public function run($maxSeconds = null)
+    public function run(?float $maxSeconds = null)
     {
         if (!$this->isConnected()) {
             throw new ClientException("Client has to be connected.");
