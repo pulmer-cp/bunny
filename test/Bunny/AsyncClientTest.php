@@ -48,7 +48,7 @@ class AsyncClientTest extends TestCase
         })->then(function (Client $client) use ($loop) {
             $this->assertFalse($client->isConnected());
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
 
@@ -74,7 +74,7 @@ class AsyncClientTest extends TestCase
         $client->connect()->then(function () use ($loop) {
             $this->fail("client should not connect");
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
     }
@@ -94,7 +94,7 @@ class AsyncClientTest extends TestCase
             return $ch->getClient()->disconnect();
         })->then(function () use ($loop) {
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
 
@@ -130,7 +130,7 @@ class AsyncClientTest extends TestCase
 
         })->then(function () use ($loop) {
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
     }
@@ -157,7 +157,7 @@ class AsyncClientTest extends TestCase
         }, function (\Exception $e) use ($loop) {
             $this->assertInstanceOf(ClientException::class, $e);
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
     }
@@ -184,7 +184,7 @@ class AsyncClientTest extends TestCase
 
                     ++$processed;
 
-                    $client->disconnect()->done(function () use ($loop) {
+                    $client->disconnect()->then(function () use ($loop) {
                         $loop->stop();
                     });
 
@@ -193,7 +193,7 @@ class AsyncClientTest extends TestCase
                 $channel->publish(".", [], "", "disconnect_test"),
                 $channel->publish(".", [], "", "disconnect_test"),
             ]);
-        })->done();
+        })->then();
 
         $loop->run();
 
@@ -206,11 +206,11 @@ class AsyncClientTest extends TestCase
         })->then(function (Channel $channel) use ($client, $loop, &$processed) {
             return Promise\all([
                 $channel->queueDelete("disconnect_test"),
-                $client->disconnect()->done(function () use ($loop) {
+                $client->disconnect()->then(function () use ($loop) {
                     $loop->stop();
                 })
             ]);
-        })->done();
+        })->then();
 
         $loop->run();
     }
@@ -268,7 +268,7 @@ class AsyncClientTest extends TestCase
 
         })->then(function () use ($loop) {
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
     }
@@ -303,7 +303,7 @@ class AsyncClientTest extends TestCase
             });
 
             return $channel->publish("xxx", [], "", "404", true);
-        })->done();
+        })->then();
 
         $loop->run();
 
@@ -345,7 +345,7 @@ class AsyncClientTest extends TestCase
             return $ch->getClient()->disconnect();
         })->then(function () use ($loop) {
             $loop->stop();
-        })->done();
+        })->then();
 
         $loop->run();
 

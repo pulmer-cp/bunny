@@ -65,25 +65,25 @@ $client->connect()->then(function (Client $client) {
                     $reasonMsg = $reason->getMessage();
                 }
                 print "ACK FAILED! - {$reasonMsg}\n";
-            })->done();
+            })->then();
         },
         'test'
     )->then(function (MethodBasicConsumeOkFrame $response) use (&$consumerTag) {
         $consumerTag = $response->consumerTag;
-    })->done();
+    })->then();
 
-})->done();
+})->then();
 
 // Capture signals - SIGINT = Ctrl+C; SIGTERM = `kill`
 $loop->addSignal(SIGINT, function (int $signal) use (&$channelRef, &$consumerTag) {
     print "Consumer cancelled\n";
-    $channelRef->cancel($consumerTag)->done(function() {
+    $channelRef->cancel($consumerTag)->then(function() {
         exit();
     });
 });
 $loop->addSignal(SIGTERM, function (int $signal) use (&$channelRef, &$consumerTag) {
     print "Consumer cancelled\n";
-    $channelRef->cancel($consumerTag)->done(function() {
+    $channelRef->cancel($consumerTag)->then(function() {
         exit();
     });
 });
